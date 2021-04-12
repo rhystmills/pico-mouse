@@ -32,7 +32,7 @@ for register in range(*REGISTERS):
     try:
         # i2c.writeto(device, bytes([register]))
         # i2c.readfrom_into(device, result)
-        i2c.writeto_then_readfrom(device,bytes[0x00])
+        i2c.writeto_then_readfrom(device,bytes[0x40, 0x00, 0x00, register], result)
     except OSError:
         continue # Ignore registers that don't exist!
     print('Address {0}: {1}'.format(hex(register), ' '.join([hex(x) for x in result])))
