@@ -1,4 +1,5 @@
 import time
+import math
 from collections import namedtuple
 from adafruit_bus_device.i2c_device import I2CDevice
 import busio
@@ -103,8 +104,11 @@ nc = Nunchuk(busio.I2C(board.GP1, board.GP0, frequency=100000, timeout=255))
 centerX = 128
 centerY = 128
 
-scaleX = 0.3
-scaleY = 0.3
+scaleX = 0.01
+scaleY = 0.01
+
+deadzone_upper = 127
+deadzone_lower = 127
 
 cDown = False
 zDown = False
@@ -117,18 +121,80 @@ CHECK_COUNT = 0
 # while True:
 #    print((0 if nc.button_C else 1, 0 if nc.button_Z else 1))
 
+def attemptLog(n):
+    if n > 1:
+        return math.log(n)
+    if n < -1:
+        return -math.log(abs(n))
+    return 1
+
+### How should it work:
+# If moveX is greater than one, convert to int and move that number of pixels per tick
+# If moveX is less than one, divide one by the value. Convert that to an int x. Move the mouseevery x ticks
+# Perhaps change this to be based on time in the future, rather than arbitrary ticks?
+
+# base rate values for sub-pixel movement
+ySteps = 0
+xSteps = 0
+
+minMove = 0.00000001
+
+def move_if_queued(xMove, yMove):
+    global xSteps
+    global ySteps
+    oldXSteps = xSteps
+    oldYSteps = ySteps
+    newXSteps = int(1/xMove) if xMove > minMove or xMove < -minMove else 0
+    newYSteps = int(1/yMove) if yMove > minMove or yMove <-minMove else 0
+    x_to_move = False
+    y_to_move = False
+    
+    if xSteps == 1:
+        x_to_move = True
+        xSteps = 0
+    if ySteps == 1:
+        y_to_move = True
+        ySteps = 0
+
+    xVal = 1 if xMove > 0 else -1
+    yVal = 1 if yMove > 0 else -1
+    m.move(xVal if x_to_move else 0, yVal if y_to_move else 0, 0)
+
+    if xSteps > 0:
+        if newXSteps == oldXSteps:
+            xSteps -= 1
+        elif newXSteps < oldXSteps:
+            xSteps = newXSteps
+    else: xSteps = newXSteps
+
+    if ySteps > 0:
+        if newYSteps == oldYSteps:
+            ySteps -= 1
+        elif newYSteps < oldYSteps:
+            ySteps = newYSteps
+    else: ySteps = newYSteps
+        
+
+
 while True:
 
     x, y = nc.joystick
     # Eliminate spurious reads
     if x == 255 or y == 255:
         continue
-    print("x", x)
-    print("y", y)
-    relX = x - centerX
-    relY = centerY - y
+    print("x: ", x)
+    print("y: ", y)
+    #if x or y in deadzone
+    if x <= deadzone_lower or x >= deadzone_upper or y <= deadzone_lower or y >= deadzone_upper:
+        relX = x - centerX
+        relY = centerY - y
+        xMove = scaleX * abs(relX) * attemptLog(relX)
+        yMove = scaleY * abs(relY) * attemptLog(relY)
 
-    m.move(int(scaleX * relX), int(scaleY * relY), 0)
+        if xMove > 1 or yMove > 1 or xMove < -1 or yMove < -1:
+            m.move(int(xMove) if xMove > 1 or xMove < -1 else 0, int(yMove) if yMove > 1 or yMove < -1 else 0, 0)
+        else:
+            move_if_queued(xMove, yMove)
 
     buttons = nc.buttons
     c = buttons.C
@@ -141,7 +207,7 @@ while True:
                 stillDown = False
                 break
         if stillDown:
-            m.press(Mouse.LEFT_BUTTON)
+            m.press(Mouse.RIGHT_BUTTON)
             zDown = True
     elif not z and zDown:
         stillDown = True
@@ -150,11 +216,17 @@ while True:
                 stillDown = False
                 break
         if stillDown:
-            m.release(Mouse.LEFT_BUTTON)
+            m.release(Mouse.RIGHT_BUTTON)
             zDown = False
     if c and not cDown:
-        m.press(Mouse.RIGHT_BUTTON)
+        m.press(Mouse.LEFT_BUTTON)
         cDown = True
     elif not c and cDown:
-        m.release(Mouse.RIGHT_BUTTON)
+        m.release(Mouse.LEFT_BUTTON)
         cDown = False
+
+
+### Another attempt
+
+
+# Fire e.g. 100 times a second

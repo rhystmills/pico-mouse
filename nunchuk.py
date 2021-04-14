@@ -117,6 +117,7 @@ CHECK_COUNT = 0
 # while True:
 #    print((0 if nc.button_C else 1, 0 if nc.button_Z else 1))
 
+
 while True:
 
     accel = nc.acceleration
@@ -129,6 +130,7 @@ while True:
     # Eliminate spurious reads
     if x == 255 or y == 255:
         continue
+
     relX = x - centerX
     relY = y - centerY
 
