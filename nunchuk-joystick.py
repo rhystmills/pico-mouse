@@ -101,14 +101,11 @@ class Nunchuk:
 m = Mouse(usb_hid.devices)
 nc = Nunchuk(busio.I2C(board.GP1, board.GP0, frequency=100000, timeout=255))
 
-centerX = 128
-centerY = 128
-
 scaleX = 0.01
-scaleY = 0.01
+scaleY = - 0.01
 
 deadzone_upper = 127
-deadzone_lower = 127
+deadzone_lower = 123
 
 cDown = False
 zDown = False
@@ -144,8 +141,8 @@ def move_if_queued(xMove, yMove):
     global ySteps
     oldXSteps = xSteps
     oldYSteps = ySteps
-    newXSteps = int(1/xMove) if xMove > minMove or xMove < -minMove else 0
-    newYSteps = int(1/yMove) if yMove > minMove or yMove <-minMove else 0
+    newXSteps = int(1/abs(xMove)) if xMove > minMove or xMove < -minMove else 0
+    newYSteps = int(1/abs(yMove)) if yMove > minMove or yMove < -minMove else 0
     x_to_move = False
     y_to_move = False
     
@@ -161,40 +158,41 @@ def move_if_queued(xMove, yMove):
     m.move(xVal if x_to_move else 0, yVal if y_to_move else 0, 0)
 
     if xSteps > 0:
-        if newXSteps == oldXSteps:
-            xSteps -= 1
-        elif newXSteps < oldXSteps:
+        if newXSteps < oldXSteps:
             xSteps = newXSteps
+        else:
+            xSteps -= 1
     else: xSteps = newXSteps
 
     if ySteps > 0:
-        if newYSteps == oldYSteps:
-            ySteps -= 1
-        elif newYSteps < oldYSteps:
+        if newYSteps < oldYSteps:
             ySteps = newYSteps
+        else:
+            ySteps -= 1
     else: ySteps = newYSteps
         
-
+def diff_from_deadzone(x, y):
+    if x <= deadzone_lower or x >= deadzone_upper or y <= deadzone_lower or y >= deadzone_upper:
+        relX = min(0, x - deadzone_lower) if x <= deadzone_lower else max(0, x - deadzone_upper)
+        relY = min(0, y - deadzone_lower) if y <= deadzone_lower else max(0, y - deadzone_upper)
+        return (relX, relY)
+    return (0, 0)
 
 while True:
-
     x, y = nc.joystick
     # Eliminate spurious reads
     if x == 255 or y == 255:
         continue
     print("x: ", x)
     print("y: ", y)
-    #if x or y in deadzone
-    if x <= deadzone_lower or x >= deadzone_upper or y <= deadzone_lower or y >= deadzone_upper:
-        relX = x - centerX
-        relY = centerY - y
-        xMove = scaleX * abs(relX) * attemptLog(relX)
-        yMove = scaleY * abs(relY) * attemptLog(relY)
+    #if x or y not in deadzone
+    (relX, relY) = diff_from_deadzone(x,y)
+    xMove = scaleX * abs(relX) * attemptLog(relX)
+    yMove = scaleY * abs(relY) * attemptLog(relY)
 
-        if xMove > 1 or yMove > 1 or xMove < -1 or yMove < -1:
-            m.move(int(xMove) if xMove > 1 or xMove < -1 else 0, int(yMove) if yMove > 1 or yMove < -1 else 0, 0)
-        else:
-            move_if_queued(xMove, yMove)
+    if xMove >= 1 or yMove >= 1 or xMove <= -1 or yMove <= -1:
+        m.move(int(xMove) if xMove >= 1 or xMove <= -1 else 0, int(yMove) if yMove >= 1 or yMove <= -1 else 0, 0)
+    move_if_queued(xMove, yMove)
 
     buttons = nc.buttons
     c = buttons.C
@@ -224,9 +222,3 @@ while True:
     elif not c and cDown:
         m.release(Mouse.LEFT_BUTTON)
         cDown = False
-
-
-### Another attempt
-
-
-# Fire e.g. 100 times a second
